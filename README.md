@@ -18,7 +18,7 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
 
 ## Uso
 
-- **Home**: un pulsante per ogni giorno (Lunedì, Martedì…). Toccalo per iniziare.
+- **Home**: una pagina per ogni giorno, colorata in base ai muscoli. Scorri o usa la barra in vetro in basso per cambiare giorno. All'apertura l'app è già sul giorno di oggi (se oggi è riposo, sul prossimo allenamento; se ne hai uno lasciato a metà, su quello). Ogni pagina mostra l'elenco degli esercizi e il pulsante **Inizia allenamento**.
 - **Allenamento**: in alto vedi il gruppo muscolare, l'esercizio e le ripetizioni (`10 ripetizioni` oppure `A cedimento`). In basso, vicino al pulsante, "Serie 2 di 3" con una barra per serie, e cosa viene dopo.
   - **Serie fatta**: il pulsante grande in basso. All'ultima serie passa da solo all'esercizio successivo.
   - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
@@ -54,6 +54,6 @@ Servono JDK 17+ e l'Android SDK (platform 37).
 
 L'APK viene generato in `app/build/outputs/apk/release/app-release.apk`.
 
-Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9), nessuna dipendenza oltre ad AndroidX. Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES`, usati solo per gli aggiornamenti.
+Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9) e [Haze](https://github.com/chrisbanes/haze) per l'effetto vetro della navbar (rifrazione completa da Android 13, versione semplificata sui precedenti). Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES`, usati solo per gli aggiornamenti.
 
 Gli screenshot delle schermate si rigenerano con `./gradlew testDebugUnitTest --tests "*ScreenshotTest*"` e finiscono in `app/build/shots/`.

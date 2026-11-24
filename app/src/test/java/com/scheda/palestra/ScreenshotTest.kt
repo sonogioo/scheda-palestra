@@ -1,6 +1,7 @@
 package com.scheda.palestra
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -22,14 +23,16 @@ class ScreenshotTest {
 
     @Test
     fun screens() {
-        shot("1_home")
-        rule.onNodeWithText("Lunedì").performClick()
-        shot("2_train_start")
+        shot("1_home_oggi")
+        rule.onNodeWithText("Lun").performClick()
+        rule.waitForIdle()
+        shot("2_home_lunedi")
+        rule.onNodeWithTag("start_0").performClick()
+        shot("3_train_start")
         rule.onNodeWithText("Serie fatta").performClick()
-        shot("3_train_set2")
+        shot("4_train_set2")
         rule.onNodeWithText("Esci").performClick()
-        shot("4_home_in_progress")
-        rule.onNodeWithText("Modifica scheda").performClick()
-        shot("5_edit")
+        rule.waitForIdle()
+        shot("5_home_dopo_esci")
     }
 }
