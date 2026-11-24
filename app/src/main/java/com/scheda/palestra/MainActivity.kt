@@ -175,7 +175,8 @@ private fun App(store: Store, startTodayRequest: Int) {
         mutableStateOf(store.loadProgress()?.takeIf { it.isValidFor(SchedaParser.parse(text)) })
     }
     // Se l'app era stata chiusa a metà allenamento, si riparte direttamente da lì.
-    var screen by remember { mutableStateOf(if (progress != null) Screen.Train else Screen.Home) }
+    // Si apre sempre sulla Home: l'allenamento parte solo quando lo scegli tu.
+    var screen by remember { mutableStateOf(Screen.Home) }
     var update by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var history by remember { mutableStateOf(store.history()) }
     var weights by remember { mutableStateOf(store.allWeights()) }
@@ -208,14 +209,18 @@ private fun App(store: Store, startTodayRequest: Int) {
     fun installUpdate(release: Updater.Release) {
         if (!Updater.canInstall(context)) {
             Updater.openInstallPermissionSettings(context)
-            update = UpdateState.Available(release, "Consenti «Installa app sconosciute» a Scheda, poi torna qui e tocca di nuovo Aggiorna.")
+            update = UpdateState.Available(release, "Consenti «Installa app sconosciute» a focus, poi torna qui e tocca di nuovo Aggiorna.")
             return
         }
         update = UpdateState.Downloading
         scope.launch {
             try {
                 val apk = withContext(Dispatchers.IO) { Updater.download(context, release) }
-                Updater.install(context, apk)
+                try {
+                    Updater.install(context, apk)
+                } catch (_: Exception) {
+                    Updater.installWithSystemInstaller(context)
+                }
                 update = UpdateState.Available(release)
             } catch (e: Exception) {
                 update = UpdateState.Failed("Download non riuscito: ${e.message ?: "errore"}")
@@ -226,12 +231,10 @@ private fun App(store: Store, startTodayRequest: Int) {
     // Controllo silenzioso all'avvio: se c'è una versione nuova compare un avviso in Home.
     LaunchedEffect(Unit) { if (!isRobolectric) checkUpdates(silent = true) }
 
-    // Scorciatoia dall'icona: riprende l'allenamento in corso o inizia quello di oggi.
+    // Scorciatoia dall'icona: apre la Home sulla scheda di oggi, senza avviare nulla.
     LaunchedEffect(startTodayRequest) {
-        if (startTodayRequest == 0 || workouts.isEmpty()) return@LaunchedEffect
-        val p = progress
-        if (p != null && !p.isFinished(workouts[p.workout])) screen = Screen.Train
-        else start(Days.indexFor(workouts, LocalDate.now().dayOfWeek))
+        if (startTodayRequest == 0) return@LaunchedEffect
+        if (screen == Screen.Train) screen = Screen.Home
     }
 
     Box(Modifier.safeDrawingPadding()) {
@@ -246,6 +249,7 @@ private fun App(store: Store, startTodayRequest: Int) {
                 onEdit = { screen = Screen.Edit },
                 onCheckUpdates = { checkUpdates(silent = false) },
                 onInstallUpdate = ::installUpdate,
+                showTodayRequest = startTodayRequest,
             )
 
             Screen.Edit -> EditScreen(
@@ -346,6 +350,7 @@ private fun HomeScreen(
     onEdit: () -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: (Updater.Release) -> Unit,
+    showTodayRequest: Int = 0,
 ) {
     val today = remember { LocalDate.now() }
     val haze = rememberHazeState()
@@ -365,7 +370,12 @@ private fun HomeScreen(
     // All'apertura si parte dal giorno di oggi (o dal prossimo allenamento se oggi è riposo);
     // se c'è un allenamento lasciato a metà, si torna su quello.
     val unfinished = progress?.takeIf { !it.isFinished(workouts[it.workout]) }?.workout
-    val pager = rememberPagerState(initialPage = unfinished ?: Days.indexFor(workouts, today.dayOfWeek)) { workouts.size }
+    val todayIndex = Days.indexFor(workouts, today.dayOfWeek)
+    // Dalla scorciatoia si va sempre sulla scheda di oggi.
+    val pager = rememberPagerState(initialPage = if (showTodayRequest > 0) todayIndex else unfinished ?: todayIndex) { workouts.size }
+    LaunchedEffect(showTodayRequest) {
+        if (showTodayRequest > 0) pager.scrollToPage(todayIndex)
+    }
 
     Box(Modifier.fillMaxSize()) {
         HorizontalPager(

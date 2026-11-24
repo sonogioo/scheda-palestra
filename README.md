@@ -14,7 +14,7 @@ L'APK è firmato con una chiave di debug: va bene per uso personale, non per il 
 
 ## Aggiornamenti
 
-Dalla versione 1.1 l'app controlla da sola, all'avvio, se su GitHub Releases c'è una versione nuova. Se c'è, in Home compare **Aggiorna**: l'app scarica l'APK e Android chiede conferma. La prima volta Android chiede anche di consentire a focus di installare app sconosciute. In fondo alla Home c'è anche **Controlla aggiornamenti**. La scheda salvata resta.
+Dalla versione 1.1 l'app controlla da sola, all'avvio, se su GitHub Releases c'è una versione nuova. Se c'è, in Home compare **Aggiorna**: l'app scarica l'APK e Android chiede conferma. Se il telefono blocca l'aggiornamento diretto (per esempio con «Self update is blocked»), dalla 1.3.1 l'app apre l'installer di sistema; se non va neanche quello, apre la pagina della release. La prima volta Android chiede anche di consentire a focus di installare app sconosciute. In fondo alla Home c'è anche **Controlla aggiornamenti**. La scheda salvata resta.
 
 Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app/build.gradle.kts`, compila, crea una release con tag `vX.Y` e allega l'APK. L'APK deve essere firmato con **la stessa chiave** della versione installata, altrimenti Android rifiuta l'aggiornamento.
 
@@ -31,9 +31,9 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
   - **Peso**: ±2,5 kg sulla card; l'app ricorda l'ultimo peso di ogni esercizio e lo mostra anche in Home.
   - **Fine allenamento**: riepilogo con durata, serie, esercizi e orario di inizio e fine.
 - **Settimana**: nella barra in basso compare ✓ sui giorni già fatti questa settimana (da lunedì).
-- **Scorciatoia**: tieni premuta l'icona dell'app → **Allenamento di oggi** apre direttamente l'allenamento del giorno (o quello lasciato a metà).
+- **Scorciatoia**: tieni premuta l'icona dell'app → **Allenamento di oggi** apre la scheda del giorno. L'allenamento parte solo quando tocchi **Inizia**.
 - Lo schermo resta acceso solo nella schermata di allenamento.
-- Se l'app viene chiusa, alla riapertura riparte dall'esercizio e dalla serie dove eri.
+- L'app si apre sempre sulla Home. Se avevi un allenamento a metà, trovi **Riprendi** e ricominci dall'esercizio e dalla serie dove eri.
 
 ## Modificare la scheda
 

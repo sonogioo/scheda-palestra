@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -82,6 +83,33 @@ object Updater {
         )
     }
 
+    /**
+     * Piano B: passa l'APK all'installer di sistema (stessa schermata di quando lo apri da un file manager).
+     * Serve sui telefoni che bloccano l'auto-aggiornamento con PackageInstaller ("Self update is blocked").
+     * Se neanche questo va, apre la pagina della release nel browser.
+     */
+    fun installWithSystemInstaller(context: Context): Boolean {
+        val apk = File(context.cacheDir, "update.apk")
+        if (apk.exists()) {
+            try {
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                return true
+            } catch (_: Exception) {
+                // nessuna app sa aprire l'APK: si passa al browser
+            }
+        }
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/$REPO/releases/latest"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        return false
+    }
+
     /** Avvia l'installazione: il sistema mostra la conferma "Aggiornare l'app?". */
     fun install(context: Context, apk: File) {
         val installer = context.packageManager.packageInstaller
@@ -116,8 +144,11 @@ class InstallResultReceiver : BroadcastReceiver() {
             }
             PackageInstaller.STATUS_SUCCESS -> Unit // l'app viene riavviata dal sistema
             else -> {
-                val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "errore sconosciuto"
-                Toast.makeText(context, "Aggiornamento non riuscito: $msg", Toast.LENGTH_LONG).show()
+                // Alcuni telefoni rifiutano che un'app si aggiorni da sola: si usa l'installer di sistema.
+                val viaSystem = Updater.installWithSystemInstaller(context)
+                if (!viaSystem) {
+                    Toast.makeText(context, "Scarica l'APK dalla pagina che si è aperta", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
