@@ -19,7 +19,7 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
 ## Uso
 
 - **Home**: una pagina per ogni giorno, colorata in base ai muscoli. Scorri o usa la barra in vetro in basso per cambiare giorno. All'apertura l'app è già sul giorno di oggi (se oggi è riposo, sul prossimo allenamento; se ne hai uno lasciato a metà, su quello). Ogni pagina mostra l'elenco degli esercizi e il pulsante **Inizia allenamento**.
-- **Allenamento**: in alto vedi il gruppo muscolare, l'esercizio e le ripetizioni (`10 ripetizioni` oppure `A cedimento`). In basso, vicino al pulsante, "Serie 2 di 3" con una barra per serie, e cosa viene dopo.
+- **Allenamento**: una card col colore del gruppo muscolare mostra esercizio, ripetizioni (`10 ripetizioni` oppure `A cedimento`) e un anello con la serie a cui sei; sotto, cosa viene dopo. In alto un segmento per ogni esercizio.
   - **Serie fatta**: il pulsante grande in basso. All'ultima serie passa da solo all'esercizio successivo.
   - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
   - **Salta esercizio**: passa al successivo.
