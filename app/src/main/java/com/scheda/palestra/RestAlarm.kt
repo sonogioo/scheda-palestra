@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
@@ -17,11 +18,20 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.compose.runtime.mutableIntStateOf
+import java.time.LocalDate
+
+/** Avvisa la UI che l'allenamento è cambiato fuori dall'app (pulsante della notifica, sveglia). */
+object Live {
+    val changes = mutableIntStateOf(0)
+    fun bump() { changes.intValue++ }
+}
 
 /**
- * Recupero anche a telefono bloccato o con l'app in secondo piano:
- * - notifica con il conto alla rovescia mentre recuperi;
- * - sveglia di sistema allo scadere: suono, vibrazione e notifica "Vai con la serie N".
+ * Notifica dell'allenamento in corso, anche a telefono bloccato:
+ * - esercizio, serie, peso e pulsante "Serie fatta" (o "Inizia serie" durante il recupero);
+ * - durante il recupero, conto alla rovescia;
+ * - allo scadere del recupero, sveglia di sistema: suono, vibrazione e avviso "Vai con la serie N".
  *
  * L'avviso parte una sola volta per ogni recupero, sia che arrivi prima la sveglia
  * sia che arrivi prima il conto alla rovescia dentro l'app.
@@ -32,45 +42,69 @@ object RestAlarm {
     private const val ID_TIMER = 1
     private const val ID_DONE = 2
     private const val EXTRA_UNTIL = "until"
-    private const val EXTRA_TEXT = "text"
+    const val ACTION_PRIMARY = "com.scheda.palestra.PRIMARY"
+    const val ACTION_OPEN_TRAIN = "com.scheda.palestra.OPEN_TRAIN"
 
     private var lastFired = 0L
 
-    fun schedule(context: Context, restUntil: Long, title: String, text: String) {
+    /** Aggiorna notifica e sveglia in base all'allenamento: da chiamare a ogni cambiamento. */
+    fun sync(context: Context, w: Workout?, p: Progress?, weightKg: Float) {
+        val ex = if (w != null && p != null) p.current(w) else null
+        if (w == null || p == null || ex == null) {
+            cancel(context)
+            return
+        }
         ensureChannels(context)
-        val nm = context.getSystemService(NotificationManager::class.java)
-        nm.cancel(ID_DONE)
+        val now = System.currentTimeMillis()
+        val resting = p.isResting(now)
+        val set = "Serie ${p.setsDone + 1} di ${ex.sets}"
+        val kg = if (weightKg > 0f) " · ${formatKg(weightKg)}" else ""
+        val isLastSet = p.nextExercise(w) == null && p.setsDone == ex.sets - 1
+        val buttonLabel = when {
+            resting -> "Inizia serie ${p.setsDone + 1}"
+            isLastSet -> "Fine allenamento"
+            else -> "Serie fatta"
+        }
+
         if (canNotify(context)) {
-            val n = Notification.Builder(context, CH_TIMER)
+            val b = Notification.Builder(context, CH_TIMER)
                 .setSmallIcon(R.drawable.ic_stat_timer)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setWhen(restUntil)
-                .setShowWhen(true)
-                .setUsesChronometer(true)
-                .setChronometerCountDown(true)
+                .setContentTitle(ex.name)
+                .setContentText(if (resting) "Recupero · poi ${set.lowercase()}$kg" else "$set · ${ex.repsLabel}$kg")
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setCategory(Notification.CATEGORY_STOPWATCH)
+                .setCategory(if (resting) Notification.CATEGORY_STOPWATCH else Notification.CATEGORY_WORKOUT)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setContentIntent(openApp(context))
-                .setTimeoutAfter((restUntil - System.currentTimeMillis()).coerceAtLeast(1_000))
-                .build()
-            nm.notify(ID_TIMER, n)
+                .setContentIntent(openTrain(context))
+                .addAction(
+                    Notification.Action.Builder(
+                        Icon.createWithResource(context, R.drawable.ic_stat_timer), buttonLabel, primaryIntent(context),
+                    ).build()
+                )
+            if (resting) {
+                b.setWhen(p.restUntil).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
+            } else {
+                b.setShowWhen(false)
+            }
+            context.getSystemService(NotificationManager::class.java).notify(ID_TIMER, b.build())
         }
 
         val am = context.getSystemService(AlarmManager::class.java)
-        val pi = alarmIntent(context, restUntil, text)
-        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, restUntil, pi)
+        if (resting) {
+            val pi = alarmIntent(context, p.restUntil)
+            if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, p.restUntil, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, p.restUntil, pi)
+            }
         } else {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, restUntil, pi)
+            am.cancel(alarmIntent(context, 0))
         }
     }
 
-    /** Recupero annullato o saltato: via sveglia e conto alla rovescia (l'avviso finale resta). */
+    /** Allenamento chiuso o finito: via sveglia e notifica (l'avviso di fine recupero resta). */
     fun cancel(context: Context) {
-        context.getSystemService(AlarmManager::class.java).cancel(alarmIntent(context, 0, ""))
+        context.getSystemService(AlarmManager::class.java).cancel(alarmIntent(context, 0))
         context.getSystemService(NotificationManager::class.java).cancel(ID_TIMER)
     }
 
@@ -81,8 +115,6 @@ object RestAlarm {
             lastFired = restUntil
         }
         ensureChannels(context)
-        val nm = context.getSystemService(NotificationManager::class.java)
-        nm.cancel(ID_TIMER)
         vibrate(context)
         playSound(context)
         if (canNotify(context)) {
@@ -94,9 +126,9 @@ object RestAlarm {
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setAutoCancel(true)
                 .setTimeoutAfter(60_000)
-                .setContentIntent(openApp(context))
+                .setContentIntent(openTrain(context))
                 .build()
-            nm.notify(ID_DONE, n)
+            context.getSystemService(NotificationManager::class.java).notify(ID_DONE, n)
         }
     }
 
@@ -110,8 +142,8 @@ object RestAlarm {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CH_TIMER) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CH_TIMER, "Timer di recupero", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Conto alla rovescia durante il recupero"
+                NotificationChannel(CH_TIMER, "Allenamento in corso", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Esercizio, serie e conto alla rovescia del recupero"
                     setShowBadge(false)
                 }
             )
@@ -128,17 +160,21 @@ object RestAlarm {
         }
     }
 
-    private fun openApp(context: Context) = PendingIntent.getActivity(
+    private fun openTrain(context: Context) = PendingIntent.getActivity(
         context, 0,
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        Intent(context, MainActivity::class.java).setAction(ACTION_OPEN_TRAIN).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun alarmIntent(context: Context, restUntil: Long, text: String) = PendingIntent.getBroadcast(
+    private fun primaryIntent(context: Context) = PendingIntent.getBroadcast(
+        context, 1,
+        Intent(context, WorkoutActionReceiver::class.java).setAction(ACTION_PRIMARY),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun alarmIntent(context: Context, restUntil: Long) = PendingIntent.getBroadcast(
         context, 0,
-        Intent(context, RestAlarmReceiver::class.java)
-            .putExtra(EXTRA_UNTIL, restUntil)
-            .putExtra(EXTRA_TEXT, text),
+        Intent(context, RestAlarmReceiver::class.java).putExtra(EXTRA_UNTIL, restUntil),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
@@ -174,14 +210,58 @@ object RestAlarm {
         }
     }
 
+    // ------------------------------------------------ Eventi fuori dall'app
+
+    /** Legge allenamento e posizione salvati; null se non c'è nulla in corso. */
+    private fun loadCurrent(store: Store): Pair<Workout, Progress>? {
+        val workouts = SchedaParser.parse(store.loadText())
+        val p = store.loadProgress()?.takeIf { it.isValidFor(workouts) } ?: return null
+        return workouts[p.workout] to p
+    }
+
+    private fun save(context: Context, store: Store, w: Workout, p: Progress) {
+        store.saveProgress(p)
+        Live.bump()
+        sync(context, w, p, p.current(w)?.let { store.weight(it.name) } ?: 0f)
+    }
+
+    /** Sveglia di fine recupero. */
     internal fun onAlarm(context: Context, intent: Intent) {
         val until = intent.getLongExtra(EXTRA_UNTIL, 0)
         // Sveglia arrivata con molto ritardo (telefono spento, ecc.): niente avviso.
         if (until == 0L || System.currentTimeMillis() - until > 60_000) return
-        fire(context, until, intent.getStringExtra(EXTRA_TEXT).orEmpty())
+        val store = Store(context)
+        val (w, p) = loadCurrent(store) ?: return
+        if (p.restUntil != until) return
+        fire(context, until, restEndText(w, p))
+        save(context, store, w, p.noRest())
     }
+
+    /** Pulsante della notifica: come il pulsante grande dell'app. */
+    internal fun onPrimary(context: Context) {
+        val store = Store(context)
+        val (w, p) = loadCurrent(store) ?: return cancel(context)
+        if (p.isFinished(w)) return cancel(context)
+        clearDone(context)
+        val now = System.currentTimeMillis()
+        val next = if (p.isResting(now)) p.noRest() else p.completeSet(w, now)
+        if (next.isFinished(w)) store.markDone(w, LocalDate.now())
+        save(context, store, w, next)
+    }
+}
+
+/** Testo dell'avviso di fine recupero: quale serie viene adesso. */
+internal fun restEndText(w: Workout, p: Progress): String {
+    val ex = p.current(w) ?: return ""
+    return "Vai: serie ${p.setsDone + 1} di ${ex.sets} · ${ex.name}"
 }
 
 class RestAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = RestAlarm.onAlarm(context, intent)
+}
+
+class WorkoutActionReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == RestAlarm.ACTION_PRIMARY) RestAlarm.onPrimary(context)
+    }
 }

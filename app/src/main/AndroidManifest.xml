@@ -40,6 +40,9 @@
         <receiver
             android:name=".RestAlarmReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".WorkoutActionReceiver"
+            android:exported="false" />
         <!-- Per passare l'APK scaricato all'installer di sistema -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.Manifest
 import android.os.Build
+import android.widget.Toast
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -115,17 +116,21 @@ class MainActivity : ComponentActivity() {
     /** Incrementato a ogni avvio dalla scorciatoia "Allenamento di oggi". */
     private val startTodayRequests = mutableIntStateOf(0)
 
+    /** Incrementato quando si tocca la notifica dell'allenamento: si va alla schermata della serie. */
+    private val openTrainRequests = mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null && intent?.action == ACTION_START_TODAY) startTodayRequests.intValue++
+        if (savedInstanceState == null && intent?.action == RestAlarm.ACTION_OPEN_TRAIN) openTrainRequests.intValue++
         val store = Store(applicationContext)
         setContent {
             MaterialTheme(colorScheme = SchedaColors, typography = SchedaType, shapes = SchedaShapes) {
                 Box(Modifier.fillMaxSize().background(Background)) {
                     // Testo bianco di default su tutto lo sfondo inchiostro.
                     CompositionLocalProvider(LocalContentColor provides Color.White) {
-                        App(store, startTodayRequests.intValue)
+                        App(store, startTodayRequests.intValue, openTrainRequests.intValue)
                     }
                 }
             }
@@ -135,6 +140,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.action == ACTION_START_TODAY) startTodayRequests.intValue++
+        if (intent.action == RestAlarm.ACTION_OPEN_TRAIN) openTrainRequests.intValue++
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -163,7 +169,7 @@ private sealed interface UpdateState {
 private val isRobolectric = Build.FINGERPRINT == "robolectric"
 
 @Composable
-private fun App(store: Store, startTodayRequest: Int) {
+private fun App(store: Store, startTodayRequest: Int, openTrainRequest: Int = 0) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -182,12 +188,43 @@ private fun App(store: Store, startTodayRequest: Int) {
         progress = p
         store.saveProgress(p)
         if (isRobolectric) return
-        // Notifica col conto alla rovescia + sveglia di fine recupero, anche a telefono bloccato.
+        // Notifica dell'allenamento (serie, peso, recupero) + sveglia di fine recupero.
         val w = p?.let { workouts.getOrNull(it.workout) }
-        if (p != null && w != null && p.isResting(System.currentTimeMillis())) {
-            RestAlarm.schedule(context, p.restUntil, "Recupero · ${w.exercises[p.exercise].name}", restEndText(w, p))
-        } else {
+        val kg = w?.let { p.current(it) }?.let { weights[it.name.lowercase()] } ?: 0f
+        RestAlarm.sync(context, w, p, kg)
+    }
+
+    // Cambiamenti fatti dalla notifica o dalla sveglia mentre l'app era in secondo piano.
+    val liveChanges = Live.changes.intValue
+    LaunchedEffect(liveChanges) {
+        if (liveChanges == 0) return@LaunchedEffect
+        progress = store.loadProgress()?.takeIf { it.isValidFor(workouts) }
+        history = store.history()
+    }
+
+    // Backup: esporta e importa scheda, pesi e storico in un file.
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { it.write(store.exportJson()) }
+        }.isSuccess
+        Toast.makeText(context, if (ok) "Backup salvato" else "Backup non riuscito", Toast.LENGTH_LONG).show()
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val result = runCatching {
+            val json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+            store.importJson(json)
+        }
+        if (result.isSuccess) {
+            text = store.loadText()
+            weights = store.allWeights()
+            history = store.history()
+            progress = null
             RestAlarm.cancel(context)
+            Toast.makeText(context, "Backup ripristinato", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "File non valido: serve un backup di focus", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -242,6 +279,13 @@ private fun App(store: Store, startTodayRequest: Int) {
     // Controllo silenzioso all'avvio: se c'è una versione nuova compare un avviso in Home.
     LaunchedEffect(Unit) { if (!isRobolectric) checkUpdates(silent = true) }
 
+    // Notifica toccata: si torna alla serie dell'allenamento in corso.
+    LaunchedEffect(openTrainRequest) {
+        if (openTrainRequest == 0) return@LaunchedEffect
+        val p = progress
+        if (p != null && workouts.getOrNull(p.workout)?.let { !p.isFinished(it) } == true) screen = Screen.Train
+    }
+
     // Scorciatoia dall'icona: apre la Home sulla scheda di oggi, senza avviare nulla.
     LaunchedEffect(startTodayRequest) {
         if (startTodayRequest == 0) return@LaunchedEffect
@@ -260,6 +304,8 @@ private fun App(store: Store, startTodayRequest: Int) {
                 onEdit = { screen = Screen.Edit },
                 onCheckUpdates = { checkUpdates(silent = false) },
                 onInstallUpdate = ::installUpdate,
+                onExport = { exportLauncher.launch("focus-backup-${LocalDate.now()}.json") },
+                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                 showTodayRequest = startTodayRequest,
             )
 
@@ -305,11 +351,7 @@ private fun App(store: Store, startTodayRequest: Int) {
     }
 }
 
-/** Testo dell'avviso di fine recupero: quale serie viene adesso. */
-internal fun restEndText(w: Workout, p: Progress): String {
-    val ex = w.exercises[p.exercise]
-    return "Vai: serie ${p.setsDone + 1} di ${ex.sets} · ${ex.name}"
-}
+
 
 // ---------------------------------------------------------------- Componenti comuni
 
@@ -357,6 +399,8 @@ private fun HomeScreen(
     onEdit: () -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: (Updater.Release) -> Unit,
+    onExport: () -> Unit = {},
+    onImport: () -> Unit = {},
     showTodayRequest: Int = 0,
 ) {
     val today = remember { LocalDate.now() }
@@ -400,6 +444,8 @@ private fun HomeScreen(
                 onStart = onStart,
                 onEdit = onEdit,
                 onCheckUpdates = onCheckUpdates,
+                onExport = onExport,
+                onImport = onImport,
                 onInstallUpdate = onInstallUpdate,
             )
         }
@@ -492,6 +538,8 @@ private fun DayPage(
     onStart: (Int) -> Unit,
     onEdit: () -> Unit,
     onCheckUpdates: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
     onInstallUpdate: (Updater.Release) -> Unit,
 ) {
     val type = MaterialTheme.typography
@@ -589,7 +637,7 @@ private fun DayPage(
             }
             items(items.size) { k ->
                 val (i, e) = items[k]
-                val exDone = inProgress != null && i < inProgress.exercise
+                val exDone = inProgress != null && inProgress.isDone(workout, i)
                 val color = paletteFor(e.group).solid
                 val kg = weights[e.name.lowercase()] ?: 0f
                 Row(
@@ -648,6 +696,13 @@ private fun DayPage(
                     Modifier.weight(1f),
                 )
             }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                GhostButton("Esporta backup", onExport, Modifier.weight(1f))
+                GhostButton("Importa backup", onImport, Modifier.weight(1f))
+            }
             val footer = (update as? UpdateState.Failed)?.message ?: "Versione ${BuildConfig.VERSION_NAME}"
             Text(footer, style = type.bodyLarge, color = SoftText, modifier = Modifier.padding(top = 12.dp))
         }
@@ -704,8 +759,15 @@ private fun TrainScreen(
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val resting = progress.isResting(now)
 
-    // Avviso a schermo per qualche secondo quando il recupero finisce.
+    // Avviso a schermo per qualche secondo quando il recupero finisce
+    // (sia dal conto alla rovescia dell'app sia dalla sveglia di sistema).
     var justEnded by remember { mutableStateOf(false) }
+    var lastRestUntil by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(progress.restUntil) {
+        val ended = System.currentTimeMillis() - lastRestUntil
+        if (progress.restUntil == 0L && lastRestUntil != 0L && ended in 0..5_000) justEnded = true
+        lastRestUntil = progress.restUntil
+    }
     LaunchedEffect(justEnded) {
         if (justEnded) {
             delay(6_000)
@@ -727,15 +789,14 @@ private fun TrainScreen(
             // Se l'app è stata riaperta molto dopo, niente avviso "in ritardo".
             if (now - latest.restUntil < 5_000) {
                 RestAlarm.fire(context, latest.restUntil, restEndText(workout, latest))
-                justEnded = true
             }
             onProgress(latest.noRest())
         }
     }
 
     val total = workout.exercises.size
-    val ex = workout.exercises[progress.exercise]
-    val next = workout.exercises.getOrNull(progress.exercise + 1)
+    val ex = progress.current(workout)!!
+    val next = progress.nextExercise(workout)
     val isLastSet = next == null && progress.setsDone == ex.sets - 1
     val palette = paletteFor(ex.group)
 
@@ -781,7 +842,8 @@ private fun TrainScreen(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            workout.exercises.forEachIndexed { i, e ->
+            progress.orderFor(workout).forEachIndexed { i, idx ->
+                val e = workout.exercises[idx]
                 Box(
                     Modifier.weight(1f).height(6.dp).background(
                         when {
@@ -887,8 +949,13 @@ private fun TrainScreen(
             Modifier.fillMaxWidth().padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (progress.canUndo) GhostButton("Annulla serie", { onProgress(progress.undo(workout)) }, Modifier.weight(1f))
-            GhostButton("Salta esercizio", { onProgress(progress.skip(workout)) }, Modifier.weight(1f))
+            val postpone = progress.canPostpone(workout)
+            if (progress.canUndo) {
+                GhostButton(if (postpone) "Annulla" else "Annulla serie", { onProgress(progress.undo(workout)) }, Modifier.weight(1f))
+            }
+            // Macchina occupata: l'esercizio va in fondo e si passa al prossimo.
+            if (postpone) GhostButton("Occupata", { onProgress(progress.postpone(workout)) }, Modifier.weight(1f).testTag("postpone"))
+            GhostButton(if (postpone) "Salta" else "Salta esercizio", { onProgress(progress.skip(workout)) }, Modifier.weight(1f))
         }
     }
 }

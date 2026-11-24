@@ -1,11 +1,14 @@
 package com.scheda.palestra
 
 import android.content.Context
+import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
 
 /**
- * Dove sei arrivato: allenamento, esercizio, serie già fatte dell'esercizio corrente.
+ * Dove sei arrivato: allenamento, posizione nella sequenza ([exercise]), serie già fatte.
+ * [order] è la sequenza degli esercizi (indici nella scheda); vuota = ordine della scheda.
+ * Cambia quando un esercizio viene rimandato perché la macchina è occupata.
  * [startedAt] è l'ora d'inizio (per il riepilogo); [restUntil]/[restTotal] il recupero in corso (ms).
  */
 data class Progress(
@@ -15,31 +18,54 @@ data class Progress(
     val startedAt: Long = 0,
     val restUntil: Long = 0,
     val restTotal: Long = 0,
+    val order: List<Int> = emptyList(),
 ) {
+
+    fun orderFor(w: Workout): List<Int> =
+        if (order.size == w.exercises.size) order else w.exercises.indices.toList()
+
+    /** Esercizio da fare adesso (null se finito). */
+    fun current(w: Workout): Exercise? = orderFor(w).getOrNull(exercise)?.let { w.exercises[it] }
+
+    fun nextExercise(w: Workout): Exercise? = orderFor(w).getOrNull(exercise + 1)?.let { w.exercises[it] }
+
+    /** Vero se l'esercizio [index] della scheda è già stato fatto. */
+    fun isDone(w: Workout, index: Int) = orderFor(w).indexOf(index) in 0 until exercise
 
     fun isFinished(w: Workout) = exercise >= w.exercises.size
 
     /** "Serie fatta": avanza di una serie, e all'ultima passa all'esercizio dopo. */
     fun advance(w: Workout): Progress {
-        if (isFinished(w)) return this
+        val ex = current(w) ?: return this
         val done = setsDone + 1
-        return if (done >= w.exercises[exercise].sets) copy(exercise = exercise + 1, setsDone = 0)
+        return if (done >= ex.sets) copy(exercise = exercise + 1, setsDone = 0)
         else copy(setsDone = done)
     }
 
     /** Annulla l'ultima serie segnata, anche tornando all'esercizio precedente. */
     fun undo(w: Workout): Progress = when {
         setsDone > 0 -> copy(setsDone = setsDone - 1)
-        exercise > 0 -> copy(exercise = exercise - 1, setsDone = w.exercises[exercise - 1].sets - 1)
+        exercise > 0 -> copy(exercise = exercise - 1, setsDone = w.exercises[orderFor(w)[exercise - 1]].sets - 1)
         else -> this
     }.noRest()
+
+    /** Macchina occupata: si rimanda solo prima di iniziare l'esercizio, e se ne resta almeno un altro. */
+    fun canPostpone(w: Workout) = setsDone == 0 && exercise < w.exercises.size - 1
+
+    /** Sposta l'esercizio corrente in fondo alla sequenza: lo si fa quando gli altri sono finiti. */
+    fun postpone(w: Workout): Progress {
+        if (!canPostpone(w)) return this
+        val o = orderFor(w).toMutableList()
+        o.add(o.removeAt(exercise))
+        return copy(order = o).noRest()
+    }
 
     fun skip(w: Workout): Progress =
         (if (isFinished(w)) this else copy(exercise = exercise + 1, setsDone = 0)).noRest()
 
     /** Dopo "Serie fatta": avanza e, se l'allenamento non è finito, parte il recupero. */
     fun completeSet(w: Workout, now: Long): Progress {
-        val restSeconds = w.exercises.getOrNull(exercise)?.restSeconds ?: Rest.DEFAULT_SECONDS
+        val restSeconds = current(w)?.restSeconds ?: Rest.DEFAULT_SECONDS
         val next = advance(w)
         return if (next.isFinished(w)) next.noRest()
         else next.copy(restUntil = now + restSeconds * 1000L, restTotal = restSeconds * 1000L)
@@ -61,8 +87,9 @@ data class Progress(
     /** Valido solo se punta ancora a qualcosa di esistente (la scheda potrebbe essere cambiata). */
     fun isValidFor(workouts: List<Workout>): Boolean {
         val w = workouts.getOrNull(workout) ?: return false
+        if (order.isNotEmpty() && order.sorted() != w.exercises.indices.toList()) return false
         if (exercise > w.exercises.size) return false
-        return exercise == w.exercises.size || setsDone < w.exercises[exercise].sets
+        return exercise == w.exercises.size || setsDone < current(w)!!.sets
     }
 }
 
@@ -84,6 +111,7 @@ class Store(private val context: Context) {
         else Progress(
             prefs.getInt("w", 0), prefs.getInt("e", 0), prefs.getInt("s", 0),
             prefs.getLong("t0", 0), prefs.getLong("ru", 0), prefs.getLong("rt", 0),
+            prefs.getString("o", "").orEmpty().split(',').mapNotNull { it.toIntOrNull() },
         )
 
     fun saveProgress(p: Progress?) {
@@ -91,7 +119,8 @@ class Store(private val context: Context) {
             if (p == null) clear()
             else putInt("w", p.workout).putInt("e", p.exercise).putInt("s", p.setsDone)
                 .putLong("t0", p.startedAt).putLong("ru", p.restUntil).putLong("rt", p.restTotal)
-        }.apply()
+                .putString("o", p.order.joinToString(","))
+        }.commit() // subito su disco: lo leggono anche i pulsanti della notifica
     }
 
     /** Ultimo peso usato per un esercizio, in kg (0 = non impostato). */
@@ -108,6 +137,43 @@ class Store(private val context: Context) {
 
     fun markDone(workout: Workout, date: LocalDate) =
         history.edit().putLong(workout.displayName.lowercase(), date.toEpochDay()).apply()
+
+    /** Backup: scheda, pesi e storico in un JSON (l'allenamento in corso non serve). */
+    fun exportJson(): String = Backup.encode(loadText(), allWeights(), history()).toString(2)
+
+    /** Ripristina un backup. Lancia un'eccezione se il file non è un backup di focus. */
+    fun importJson(json: String) {
+        val b = Backup.decode(json)
+        saveText(b.text)
+        weights.edit().clear().apply { b.weights.forEach { (k, v) -> putFloat(k, v) } }.commit()
+        history.edit().clear().apply { b.history.forEach { (k, v) -> putLong(k, v.toEpochDay()) } }.commit()
+        saveProgress(null)
+    }
+}
+
+object Backup {
+    data class Data(val text: String, val weights: Map<String, Float>, val history: Map<String, LocalDate>)
+
+    fun encode(text: String, weights: Map<String, Float>, history: Map<String, LocalDate>) = JSONObject().apply {
+        put("app", "focus")
+        put("version", 1)
+        put("scheda", text)
+        put("weights", JSONObject().apply { weights.forEach { (k, v) -> put(k, v.toDouble()) } })
+        put("history", JSONObject().apply { history.forEach { (k, v) -> put(k, v.toString()) } })
+    }
+
+    fun decode(json: String): Data {
+        val o = JSONObject(json)
+        require(o.optString("app") == "focus") { "Non è un backup di focus" }
+        val text = o.getString("scheda")
+        val w = o.optJSONObject("weights")
+        val h = o.optJSONObject("history")
+        return Data(
+            text,
+            w?.keys()?.asSequence()?.associate { it to w.getDouble(it).toFloat() }.orEmpty(),
+            h?.keys()?.asSequence()?.associate { it to LocalDate.parse(h.getString(it)) }.orEmpty(),
+        )
+    }
 }
 
 /** Recupero tra le serie: letto dalla nota dell'esercizio ("rec 90", "rec 1:30", "rec 2'"), altrimenti 90 s. */

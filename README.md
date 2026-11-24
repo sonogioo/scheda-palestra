@@ -25,15 +25,21 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
   - **Serie fatta**: il pulsante grande in basso. All'ultima serie passa da solo all'esercizio successivo.
   - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
   - **Salta esercizio**: passa al successivo.
+  - **Occupata**: la macchina è occupata? L'esercizio va in fondo e passi al prossimo; lo ritrovi quando hai finito gli altri. Compare prima di iniziare l'esercizio.
   - **Esci**: torna alla home. L'allenamento resta "in corso" e lo riprendi toccando lo stesso giorno.
-- **Recupero**: dopo ogni serie parte da solo il timer (90 s di base, oppure quello scritto nella nota: `rec 60`, `rec 1:30`, `rec 2'`, `recupero 2 min`). Mentre recuperi c'è una **notifica col conto alla rovescia** (visibile anche a schermo bloccato). Allo zero suona (suono di notifica, rispetta il silenzioso), vibra forte e compare «Recupero finito · vai con la serie N», sia nell'app sia come notifica. −15/+15 lo regolano, **Inizia serie** lo salta. Al primo allenamento Android chiede il permesso per le notifiche: concedilo.
+- **Recupero**: dopo ogni serie parte da solo il timer (90 s di base, oppure quello scritto nella nota: `rec 60`, `rec 1:30`, `rec 2'`, `recupero 2 min`). Mentre recuperi la notifica mostra il **conto alla rovescia** (visibile anche a schermo bloccato). Allo zero suona (suono di notifica, rispetta il silenzioso), vibra forte e compare «Recupero finito · vai con la serie N», sia nell'app sia come notifica. −15/+15 lo regolano, **Inizia serie** lo salta. Al primo allenamento Android chiede il permesso per le notifiche: concedilo.
   - **Tasto volume giù**: fa la stessa cosa del pulsante grande (serie fatta / inizia serie), senza guardare lo schermo.
   - **Peso**: ±2,5 kg sulla card; l'app ricorda l'ultimo peso di ogni esercizio e lo mostra anche in Home.
   - **Fine allenamento**: riepilogo con durata, serie, esercizi e orario di inizio e fine.
+- **Notifica dell'allenamento**: finché l'allenamento è in corso c'è una notifica con esercizio, serie e peso, e il pulsante **Serie fatta** (o **Inizia serie** durante il recupero). Funziona a telefono bloccato, senza aprire l'app. Toccandola torni alla serie.
 - **Settimana**: nella barra in basso compare ✓ sui giorni già fatti questa settimana (da lunedì).
 - **Scorciatoia**: tieni premuta l'icona dell'app → **Allenamento di oggi** apre la scheda del giorno. L'allenamento parte solo quando tocchi **Inizia**.
 - Lo schermo resta acceso solo nella schermata di allenamento.
 - L'app si apre sempre sulla Home. Se avevi un allenamento a metà, trovi **Riprendi** e ricominci dall'esercizio e dalla serie dove eri.
+
+## Backup
+
+In fondo alla Home: **Esporta backup** salva scheda, pesi e giorni fatti in un file `.json` (per esempio su Drive o nei Download). **Importa backup** li ripristina, sostituendo quelli attuali. Utile se cambi telefono o reinstalli l'app.
 
 ## Modificare la scheda
 
