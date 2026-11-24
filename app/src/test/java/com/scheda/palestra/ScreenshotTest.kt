@@ -1,6 +1,7 @@
 package com.scheda.palestra
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -21,18 +22,45 @@ class ScreenshotTest {
 
     private fun shot(name: String) = rule.onRoot().captureRoboImage("build/shots/$name.png")
 
+    private fun settle() = rule.waitForIdle()
+
+    private fun tap(text: String) {
+        rule.onNodeWithText(text).performClick(); settle()
+    }
+
+    private fun tapTag(tag: String) {
+        rule.onNodeWithTag(tag).performClick(); settle()
+    }
+
+
     @Test
     fun screens() {
+        settle()
         shot("1_home_oggi")
-        rule.onNodeWithText("Lun").performClick()
-        rule.waitForIdle()
+
+        tap("Lun")
         shot("2_home_lunedi")
-        rule.onNodeWithTag("start_0").performClick()
-        shot("3_train_start")
-        rule.onNodeWithText("Serie fatta").performClick()
-        shot("4_train_set2")
-        rule.onNodeWithText("Esci").performClick()
-        rule.waitForIdle()
-        shot("5_home_dopo_esci")
+
+        tapTag("start_0")
+        tap("+"); tap("+"); tap("+"); tap("+") // 10 kg
+        shot("3_train_peso")
+
+        tapTag("cta") // Serie fatta → recupero
+        shot("4_recupero")
+
+        tapTag("cta") // Inizia serie 2
+        shot("5_serie2")
+
+        tap("Esci")
+        tap("Ven")
+        tapTag("start_3")
+        repeat(60) {
+            if (rule.onAllNodesWithTag("cta").fetchSemanticsNodes().isEmpty()) return@repeat
+            tapTag("cta")
+        }
+        shot("6_fine")
+
+        tap("Torna alle schede")
+        shot("7_home_settimana")
     }
 }

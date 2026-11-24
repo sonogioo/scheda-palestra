@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">Scheda</string>
+    <string name="app_name">focus</string>
+    <string name="shortcut_today_short">Allenamento di oggi</string>
+    <string name="shortcut_today_long">Inizia l\'allenamento di oggi</string>
 </resources>

@@ -1,10 +1,12 @@
-# Scheda
+<p align="center"><img src="docs/logo.png" width="220" alt="focus"></p>
+
+# focus
 
 App Android per seguire la scheda di allenamento in palestra: un esercizio alla volta, a caratteri grandi, un solo tap per serie, schermo sempre acceso durante l'allenamento.
 
 ## Installazione
 
-1. Scarica `scheda-x.y.apk` dalla pagina **Releases** del repository, direttamente dal telefono.
+1. Scarica `focus-x.y.apk` (fino alla 1.2: `scheda-x.y.apk`) dalla pagina **Releases** del repository, direttamente dal telefono.
 2. Aprilo. Android chiederà di consentire a quell'app (browser o file manager) di **installare app sconosciute**: consentilo solo per questa installazione.
 3. Richiede Android 8.0 o successivo.
 
@@ -12,7 +14,7 @@ L'APK è firmato con una chiave di debug: va bene per uso personale, non per il 
 
 ## Aggiornamenti
 
-Dalla versione 1.1 l'app controlla da sola, all'avvio, se su GitHub Releases c'è una versione nuova. Se c'è, in Home compare **Aggiorna**: l'app scarica l'APK e Android chiede conferma. La prima volta Android chiede anche di consentire a Scheda di installare app sconosciute. In fondo alla Home c'è anche **Controlla aggiornamenti**. La scheda salvata resta.
+Dalla versione 1.1 l'app controlla da sola, all'avvio, se su GitHub Releases c'è una versione nuova. Se c'è, in Home compare **Aggiorna**: l'app scarica l'APK e Android chiede conferma. La prima volta Android chiede anche di consentire a focus di installare app sconosciute. In fondo alla Home c'è anche **Controlla aggiornamenti**. La scheda salvata resta.
 
 Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app/build.gradle.kts`, compila, crea una release con tag `vX.Y` e allega l'APK. L'APK deve essere firmato con **la stessa chiave** della versione installata, altrimenti Android rifiuta l'aggiornamento.
 
@@ -24,6 +26,12 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
   - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
   - **Salta esercizio**: passa al successivo.
   - **Esci**: torna alla home. L'allenamento resta "in corso" e lo riprendi toccando lo stesso giorno.
+- **Recupero**: dopo ogni serie parte da solo il timer (90 s di base, oppure quello scritto nella nota: `rec 60`, `rec 1:30`, `rec 2'`, `recupero 2 min`). Allo zero il telefono vibra. −15/+15 lo regolano, **Inizia serie** lo salta.
+  - **Tasto volume giù**: fa la stessa cosa del pulsante grande (serie fatta / inizia serie), senza guardare lo schermo.
+  - **Peso**: ±2,5 kg sulla card; l'app ricorda l'ultimo peso di ogni esercizio e lo mostra anche in Home.
+  - **Fine allenamento**: riepilogo con durata, serie, esercizi e orario di inizio e fine.
+- **Settimana**: nella barra in basso compare ✓ sui giorni già fatti questa settimana (da lunedì).
+- **Scorciatoia**: tieni premuta l'icona dell'app → **Allenamento di oggi** apre direttamente l'allenamento del giorno (o quello lasciato a metà).
 - Lo schermo resta acceso solo nella schermata di allenamento.
 - Se l'app viene chiusa, alla riapertura riparte dall'esercizio e dalla serie dove eri.
 
@@ -54,6 +62,8 @@ Servono JDK 17+ e l'Android SDK (platform 37).
 
 L'APK viene generato in `app/build/outputs/apk/release/app-release.apk`.
 
-Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9) e [Haze](https://github.com/chrisbanes/haze) per l'effetto vetro della navbar (rifrazione completa da Android 13, versione semplificata sui precedenti). Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES`, usati solo per gli aggiornamenti.
+Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9) e [Haze](https://github.com/chrisbanes/haze) per l'effetto vetro della navbar (rifrazione completa da Android 13, versione semplificata sui precedenti). Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES` (solo per gli aggiornamenti), `VIBRATE` (fine recupero).
+
+Il logo si rigenera con `java tools/Logo.java app/src/main/res docs`.
 
 Gli screenshot delle schermate si rigenerano con `./gradlew testDebugUnitTest --tests "*ScreenshotTest*"` e finiscono in `app/build/shots/`.

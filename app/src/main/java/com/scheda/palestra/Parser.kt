@@ -11,6 +11,9 @@ data class Exercise(
 ) {
     val toFailure: Boolean get() = reps.equals("F", ignoreCase = true) || reps.equals("max", ignoreCase = true)
     val repsLabel: String get() = if (toFailure) "a cedimento" else "$reps ripetizioni"
+
+    /** Recupero indicato nella nota ("rec 90"), o null se non c'è. */
+    val restSeconds: Int? get() = Rest.parse(note)
 }
 
 data class Workout(

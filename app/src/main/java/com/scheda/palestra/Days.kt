@@ -1,6 +1,7 @@
 package com.scheda.palestra
 
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 /** Riconosce il giorno della settimana dal nome dell'allenamento (italiano o inglese). */
 object Days {
@@ -30,4 +31,11 @@ object Days {
     }
 
     fun isToday(w: Workout, today: DayOfWeek) = dayOf(w) == today
+
+    /** Vero se [date] cade nella settimana di [today] (da lunedì a oggi). */
+    fun isThisWeek(date: LocalDate?, today: LocalDate): Boolean {
+        if (date == null) return false
+        val monday = today.with(DayOfWeek.MONDAY)
+        return !date.isBefore(monday) && !date.isAfter(today)
+    }
 }
