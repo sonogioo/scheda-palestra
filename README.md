@@ -26,7 +26,7 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
   - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
   - **Salta esercizio**: passa al successivo.
   - **Esci**: torna alla home. L'allenamento resta "in corso" e lo riprendi toccando lo stesso giorno.
-- **Recupero**: dopo ogni serie parte da solo il timer (90 s di base, oppure quello scritto nella nota: `rec 60`, `rec 1:30`, `rec 2'`, `recupero 2 min`). Allo zero il telefono vibra. −15/+15 lo regolano, **Inizia serie** lo salta.
+- **Recupero**: dopo ogni serie parte da solo il timer (90 s di base, oppure quello scritto nella nota: `rec 60`, `rec 1:30`, `rec 2'`, `recupero 2 min`). Mentre recuperi c'è una **notifica col conto alla rovescia** (visibile anche a schermo bloccato). Allo zero suona (suono di notifica, rispetta il silenzioso), vibra forte e compare «Recupero finito · vai con la serie N», sia nell'app sia come notifica. −15/+15 lo regolano, **Inizia serie** lo salta. Al primo allenamento Android chiede il permesso per le notifiche: concedilo.
   - **Tasto volume giù**: fa la stessa cosa del pulsante grande (serie fatta / inizia serie), senza guardare lo schermo.
   - **Peso**: ±2,5 kg sulla card; l'app ricorda l'ultimo peso di ogni esercizio e lo mostra anche in Home.
   - **Fine allenamento**: riepilogo con durata, serie, esercizi e orario di inizio e fine.
@@ -62,7 +62,7 @@ Servono JDK 17+ e l'Android SDK (platform 37).
 
 L'APK viene generato in `app/build/outputs/apk/release/app-release.apk`.
 
-Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9) e [Haze](https://github.com/chrisbanes/haze) per l'effetto vetro della navbar (rifrazione completa da Android 13, versione semplificata sui precedenti). Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES` (solo per gli aggiornamenti), `VIBRATE` (fine recupero).
+Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9) e [Haze](https://github.com/chrisbanes/haze) per l'effetto vetro della navbar (rifrazione completa da Android 13, versione semplificata sui precedenti). Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES` (solo per gli aggiornamenti), `VIBRATE`, `POST_NOTIFICATIONS` e `USE_EXACT_ALARM` (timer di recupero).
 
 Il logo si rigenera con `java tools/Logo.java app/src/main/res docs`.
 

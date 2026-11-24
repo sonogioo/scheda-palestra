@@ -2,11 +2,9 @@ package com.scheda.palestra
 
 import android.content.Context
 import android.content.Intent
+import android.Manifest
 import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -174,7 +172,6 @@ private fun App(store: Store, startTodayRequest: Int) {
     var progress by remember {
         mutableStateOf(store.loadProgress()?.takeIf { it.isValidFor(SchedaParser.parse(text)) })
     }
-    // Se l'app era stata chiusa a metà allenamento, si riparte direttamente da lì.
     // Si apre sempre sulla Home: l'allenamento parte solo quando lo scegli tu.
     var screen by remember { mutableStateOf(Screen.Home) }
     var update by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
@@ -184,9 +181,23 @@ private fun App(store: Store, startTodayRequest: Int) {
     fun setProgress(p: Progress?) {
         progress = p
         store.saveProgress(p)
+        if (isRobolectric) return
+        // Notifica col conto alla rovescia + sveglia di fine recupero, anche a telefono bloccato.
+        val w = p?.let { workouts.getOrNull(it.workout) }
+        if (p != null && w != null && p.isResting(System.currentTimeMillis())) {
+            RestAlarm.schedule(context, p.restUntil, "Recupero · ${w.exercises[p.exercise].name}", restEndText(w, p))
+        } else {
+            RestAlarm.cancel(context)
+        }
     }
 
+    // Android 13+: serve il permesso per mostrare la notifica del timer.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     fun start(index: Int) {
+        if (Build.VERSION.SDK_INT >= 33 && !RestAlarm.canNotify(context) && !isRobolectric) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         val p = progress
         if (p == null || p.workout != index || p.isFinished(workouts[index])) {
             setProgress(Progress(index, 0, 0, startedAt = System.currentTimeMillis()))
@@ -294,14 +305,10 @@ private fun App(store: Store, startTodayRequest: Int) {
     }
 }
 
-private fun vibrate(context: Context) {
-    val vibrator = if (Build.VERSION.SDK_INT >= 31) {
-        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-    } else {
-        @Suppress("DEPRECATION")
-        context.getSystemService(Vibrator::class.java)
-    }
-    vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 350, 150, 350, 150, 600), -1))
+/** Testo dell'avviso di fine recupero: quale serie viene adesso. */
+internal fun restEndText(w: Workout, p: Progress): String {
+    val ex = w.exercises[p.exercise]
+    return "Vai: serie ${p.setsDone + 1} di ${ex.sets} · ${ex.name}"
 }
 
 // ---------------------------------------------------------------- Componenti comuni
@@ -697,7 +704,17 @@ private fun TrainScreen(
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val resting = progress.isResting(now)
 
-    // Conto alla rovescia del recupero: a zero vibra e torna alla serie.
+    // Avviso a schermo per qualche secondo quando il recupero finisce.
+    var justEnded by remember { mutableStateOf(false) }
+    LaunchedEffect(justEnded) {
+        if (justEnded) {
+            delay(6_000)
+            justEnded = false
+        }
+    }
+    LaunchedEffect(Unit) { RestAlarm.clearDone(context) }
+
+    // Conto alla rovescia del recupero: a zero suona, vibra e torna alla serie.
     LaunchedEffect(progress.restUntil) {
         // Nei test di screenshot il recupero resta fermo (l'orologio di test non è quello reale).
         if (progress.restUntil == 0L || isRobolectric) return@LaunchedEffect
@@ -707,8 +724,11 @@ private fun TrainScreen(
             delay(200)
         }
         if (latest.restUntil != 0L) {
-            // Se l'app è stata riaperta molto dopo, niente vibrazione "in ritardo".
-            if (now - latest.restUntil < 5_000) vibrate(context)
+            // Se l'app è stata riaperta molto dopo, niente avviso "in ritardo".
+            if (now - latest.restUntil < 5_000) {
+                RestAlarm.fire(context, latest.restUntil, restEndText(workout, latest))
+                justEnded = true
+            }
             onProgress(latest.noRest())
         }
     }
@@ -729,6 +749,8 @@ private fun TrainScreen(
         val p = latest
         val t = System.currentTimeMillis()
         now = t
+        justEnded = false
+        RestAlarm.clearDone(context)
         onProgress(if (p.isResting(t)) p.noRest() else p.completeSet(workout, t))
     }
 
@@ -773,7 +795,21 @@ private fun TrainScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        if (justEnded) {
+            // Recupero finito: banda bianca ben visibile anche da lontano.
+            Box(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                    .background(Color.White, MaterialTheme.shapes.medium)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            ) {
+                Text(
+                    "Recupero finito · vai con la serie ${progress.setsDone + 1}",
+                    style = type.titleLarge, color = Ink, fontWeight = FontWeight.Bold,
+                )
+            }
+        } else {
+            Spacer(Modifier.height(16.dp))
+        }
 
         // Card principale col colore del gruppo muscolare.
         Column(
