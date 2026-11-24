@@ -20,6 +20,11 @@ data class Workout(
     val exercises: List<Exercise>,
 ) {
     val displayName: String get() = subtitle ?: title
+
+    /** Gruppi muscolari in ordine, senza ripetizioni: "Petto, Spalle, Tricipiti". */
+    val groupsLabel: String get() = exercises.mapNotNull { it.group }.distinct().joinToString(", ")
+
+    val totalSets: Int get() = exercises.sumOf { it.sets }
 }
 
 /**

@@ -8,7 +8,13 @@ App Android per seguire la scheda di allenamento in palestra: un esercizio alla 
 2. Aprilo. Android chiederà di consentire a quell'app (browser o file manager) di **installare app sconosciute**: consentilo solo per questa installazione.
 3. Richiede Android 8.0 o successivo.
 
-L'APK è firmato con una chiave di debug: va bene per uso personale, non per il Play Store. Per aggiornare l'app basta installare il nuovo APK sopra quello vecchio. La scheda salvata resta.
+L'APK è firmato con una chiave di debug: va bene per uso personale, non per il Play Store.
+
+## Aggiornamenti
+
+Dalla versione 1.1 l'app controlla da sola, all'avvio, se su GitHub Releases c'è una versione nuova. Se c'è, in Home compare **Aggiorna**: l'app scarica l'APK e Android chiede conferma. La prima volta Android chiede anche di consentire a Scheda di installare app sconosciute. In fondo alla Home c'è anche **Controlla aggiornamenti**. La scheda salvata resta.
+
+Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app/build.gradle.kts`, compila, crea una release con tag `vX.Y` e allega l'APK. L'APK deve essere firmato con **la stessa chiave** della versione installata, altrimenti Android rifiuta l'aggiornamento.
 
 ## Uso
 
@@ -48,4 +54,6 @@ Servono JDK 17+ e l'Android SDK (platform 37).
 
 L'APK viene generato in `app/build/outputs/apk/release/app-release.apk`.
 
-Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9), nessuna dipendenza oltre ad AndroidX. Nessun permesso richiesto, nessuna connessione a internet.
+Stack: Kotlin, Jetpack Compose (`Modifier.keepScreenOn()`, Compose UI ≥ 1.9), nessuna dipendenza oltre ad AndroidX. Permessi: `INTERNET` e `REQUEST_INSTALL_PACKAGES`, usati solo per gli aggiornamenti.
+
+Gli screenshot delle schermate si rigenerano con `./gradlew testDebugUnitTest --tests "*ScreenshotTest*"` e finiscono in `app/build/shots/`.

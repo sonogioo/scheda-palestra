@@ -52,4 +52,11 @@ class ParserTest {
         val w = SchedaParser.parse("Panca 3x10")
         assertEquals("Allenamento 1", w[0].displayName)
     }
+
+    @Test
+    fun summarizesGroupsAndSets() {
+        val lunedi = SchedaParser.parse(scheda)[0]
+        assertEquals("Petto, Spalle, Tricipiti", lunedi.groupsLabel)
+        assertEquals(21, lunedi.totalSets)
+    }
 }
