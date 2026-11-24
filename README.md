@@ -19,9 +19,9 @@ Per pubblicare una nuova versione: aumenta `versionCode` e `versionName` in `app
 ## Uso
 
 - **Home**: un pulsante per ogni giorno (Lunedì, Martedì…). Toccalo per iniziare.
-- **Allenamento**: in alto vedi il gruppo muscolare e l'esercizio, poi `3 × 10 ripetizioni` oppure `3 × a cedimento`, i pallini delle serie e cosa viene dopo.
-  - **SERIE FATTA**: il pulsante grande in basso. All'ultima serie passa da solo all'esercizio successivo.
-  - **Annulla**: torna indietro di una serie.
+- **Allenamento**: in alto vedi il gruppo muscolare, l'esercizio e le ripetizioni (`10 ripetizioni` oppure `A cedimento`). In basso, vicino al pulsante, "Serie 2 di 3" con una barra per serie, e cosa viene dopo.
+  - **Serie fatta**: il pulsante grande in basso. All'ultima serie passa da solo all'esercizio successivo.
+  - **Annulla serie**: torna indietro di una serie (compare dopo la prima).
   - **Salta esercizio**: passa al successivo.
   - **Esci**: torna alla home. L'allenamento resta "in corso" e lo riprendi toccando lo stesso giorno.
 - Lo schermo resta acceso solo nella schermata di allenamento.
